@@ -56,6 +56,10 @@ After deployment, go to your service → **Environment** and add:
 - **Sleeps** after 15 minutes of inactivity (wakes on next webhook from Telegram)
 - Each message from Telegram wakes it up automatically
 
+### Render Outbound IPs (whitelist these on proxy providers)
+- `74.220.48.0/24`
+- `74.220.56.0/24`
+
 ---
 
 ## Option 2: Oracle Cloud Always Free Tier (Credit Card Required)
