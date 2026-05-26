@@ -1,0 +1,9 @@
+node_modules/
+.env
+auth_state/
+registered_numbers.json
+ipchanger/
+logs/
+test_auth/
+auth_state/
+*.log

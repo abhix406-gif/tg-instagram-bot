@@ -1,0 +1,35 @@
+{
+  "name": "tg-instagram-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot that creates Instagram accounts via email OTP using browser automation",
+  "main": "src/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "webhook": "WEBHOOK_BASE_URL=$WEBHOOK_BASE_URL node src/index.js"
+  },
+  "keywords": [
+    "telegram",
+    "instagram",
+    "bot",
+    "playwright",
+    "telegraf"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "playwright": "^1.50.0",
+    "puppeteer": "^25.0.4",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6"
+  }
+}

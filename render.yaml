@@ -1,0 +1,29 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Render Blueprint — One-click Deploy (No Credit Card)
+#  
+#  Go to https://dashboard.render.com → New → Blueprint
+#  Connect your GitHub repo → Render auto-deploys everything.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+services:
+  - type: web
+    name: tg-instagram-bot
+    runtime: node
+    buildCommand: |
+      npm install
+      npx playwright install chromium
+      npx playwright install-deps chromium
+    startCommand: node src/index.js
+    plan: free
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: WEBHOOK_BASE_URL
+        sync: false
+      - key: PROXY_PROVIDERS
+        sync: false
+      - key: PORT
+        value: "3000"
+      - key: NODE_ENV
+        value: "production"
+    autoDeploy: true
+    healthCheckPath: /health

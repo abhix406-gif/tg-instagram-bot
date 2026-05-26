@@ -1,0 +1,4 @@
+- SMS/mobile API registration has been replaced with the Baileys linked-device pairing-code flow.
+- /register now generates a pairing code and tells the user to enter it in WhatsApp > Linked devices.
+- requestOTP/registerPhone remain as deprecated guards so stale callers get a clear unsupported-flow message.
+- Follow-up: remove old OTP names entirely after confirming no external code imports them.
