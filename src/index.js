@@ -15,10 +15,13 @@ process.on('unhandledRejection', (reason) => {
 
 /**
  * Determine run mode:
- *   WEBHOOK_BASE_URL set → webhook mode (cloud deployment: Render, Koyeb, etc.)
- *   not set            → polling mode (local PC / PM2)
+ *   RENDER=true + RENDER_EXTERNAL_URL → webhook mode (Render auto-detection)
+ *   WEBHOOK_BASE_URL set             → webhook mode (manual override)
+ *   neither set                      → polling mode (local PC / PM2)
  */
-const RUN_MODE = process.env.WEBHOOK_BASE_URL ? 'webhook' : 'polling';
+const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL
+  || (process.env.RENDER === 'true' ? process.env.RENDER_EXTERNAL_URL : null);
+const RUN_MODE = WEBHOOK_BASE_URL ? 'webhook' : 'polling';
 const PORT = Number(process.env.PORT || 3000);
 
 async function main() {
@@ -47,7 +50,7 @@ async function main() {
 
   if (RUN_MODE === 'webhook') {
     // ── Webhook mode (cloud deployment) ──
-    const webhookUrl = process.env.WEBHOOK_BASE_URL.replace(/\/$/, '') + '/telegram';
+    const webhookUrl = WEBHOOK_BASE_URL.replace(/\/$/, '') + '/telegram';
     console.log(`  🌐 Webhook URL: ${webhookUrl}`);
 
     // Attach bot to Express webhook route
