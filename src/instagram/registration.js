@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { getProxyForCountry, getBestProxy, normalizeCountry, testProxy, HAS_PROXY, getProxySummary } from './proxy.js';
 
@@ -866,14 +867,59 @@ export async function startRegistration(formData, proxyInput = null) {
       ? localeForCountry(proxy.country)
       : { locale: 'en-US', timezone: 'America/New_York' };
 
-    // Use Playwright's already-installed Chromium binary (avoids a separate
-    // ~300 MB puppeteer chrome download on Render's disk-limited free tier).
-    const executablePath = chromium.executablePath();
-    console.log(`Using Chromium at: ${executablePath}`);
+    // ── Resolve Chromium binary path ──
+    // 1) Build-time .chromium-path file (set by render.yaml: find after npx playwright install)
+    // 2) Filesystem scan of ms-playwright cache (runtime fallback)
+    // 3) chromium.executablePath() (API fallback)
+    // 4) Let Puppeteer auto-discover
+    let executablePath = null;
+    const chromiumPathFile = path.resolve('.chromium-path');
+
+    try {
+      if (fs.existsSync(chromiumPathFile)) {
+        const cached = fs.readFileSync(chromiumPathFile, 'utf8').trim();
+        if (cached && fs.existsSync(cached)) {
+          executablePath = cached;
+        }
+      }
+    } catch (_) {}
+
+    if (!executablePath) {
+      const playwrightCacheDir = path.join(
+        process.env.PLAYWRIGHT_BROWSERS_PATH ||
+          (process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache')),
+        'ms-playwright'
+      );
+      try {
+        if (fs.existsSync(playwrightCacheDir)) {
+          for (const entry of fs.readdirSync(playwrightCacheDir)) {
+            if (!entry.startsWith('chromium') || entry.includes('headless')) continue;
+            for (const sub of ['chrome-linux64', 'chrome-linux']) {
+              const bin = path.join(playwrightCacheDir, entry, sub, 'chrome');
+              if (fs.existsSync(bin)) { executablePath = bin; break; }
+            }
+            if (executablePath) break;
+          }
+        }
+      } catch (e) { console.log(`[browser] Cache scan failed: ${e.message}`); }
+    }
+
+    if (!executablePath) {
+      try {
+        const pwPath = chromium.executablePath();
+        if (pwPath && fs.existsSync(pwPath)) executablePath = pwPath;
+      } catch (_) {}
+    }
+
+    if (!executablePath) {
+      console.log('[browser] No Playwright chromium found — falling back to Puppeteer auto-discovery');
+    } else {
+      console.log(`[browser] Using Chromium at: ${executablePath}`);
+    }
 
     const launchOptions = {
       headless: true,
-      executablePath,
+      ...(executablePath ? { executablePath } : {}),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

@@ -11,6 +11,8 @@ services:
     buildCommand: |
       npm install
       npx playwright install chromium
+      find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1 > .chromium-path
+      echo "Chromium binary at: $(cat .chromium-path)"
     startCommand: node src/index.js
     plan: free
     envVars:
