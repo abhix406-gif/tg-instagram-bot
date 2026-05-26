@@ -11,9 +11,13 @@ services:
     buildCommand: |
       npm install
       npx playwright install chromium
-      find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1 > .chromium-path
-      echo "Chromium binary at: $(cat .chromium-path)"
-    startCommand: node src/index.js
+      CHROMIUM_BIN=$(find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1)
+      echo "$CHROMIUM_BIN" > .chromium-path
+      echo "Chromium binary at: $CHROMIUM_BIN"
+    startCommand: |
+      export PUPPETEER_EXECUTABLE_PATH=$(cat .chromium-path 2>/dev/null || find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1)
+      echo "PUPPETEER_EXECUTABLE_PATH=$PUPPETEER_EXECUTABLE_PATH"
+      node src/index.js
     plan: free
     envVars:
       - key: TELEGRAM_BOT_TOKEN

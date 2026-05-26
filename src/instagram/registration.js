@@ -868,21 +868,27 @@ export async function startRegistration(formData, proxyInput = null) {
       : { locale: 'en-US', timezone: 'America/New_York' };
 
     // ── Resolve Chromium binary path ──
+    // 0) PUPPETEER_EXECUTABLE_PATH env var (set by render.yaml startCommand)
     // 1) Build-time .chromium-path file (set by render.yaml: find after npx playwright install)
     // 2) Filesystem scan of ms-playwright cache (runtime fallback)
     // 3) chromium.executablePath() (API fallback)
     // 4) Let Puppeteer auto-discover
-    let executablePath = null;
-    const chromiumPathFile = path.resolve('.chromium-path');
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || null;
+    if (executablePath) {
+      console.log(`[browser] Using PUPPETEER_EXECUTABLE_PATH env: ${executablePath}`);
+    }
 
-    try {
-      if (fs.existsSync(chromiumPathFile)) {
-        const cached = fs.readFileSync(chromiumPathFile, 'utf8').trim();
-        if (cached && fs.existsSync(cached)) {
-          executablePath = cached;
+    if (!executablePath) {
+      const chromiumPathFile = path.resolve('.chromium-path');
+      try {
+        if (fs.existsSync(chromiumPathFile)) {
+          const cached = fs.readFileSync(chromiumPathFile, 'utf8').trim();
+          if (cached && fs.existsSync(cached)) {
+            executablePath = cached;
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     if (!executablePath) {
       const playwrightCacheDir = path.join(
@@ -4550,12 +4556,60 @@ export async function submit2FAOTP(creds, twoFactorOtp, proxyInput = null) {
     console.log(`[2FA] Launching iOS browser as ${device.name} for 2FA activation...`);
 
     // ── Launch stealth browser with iOS fingerprint ──
-    const puppeteer = await import('puppeteer-extra');
-    const stealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
-    puppeteer.default.use(stealthPlugin());
+    puppeteer.use(StealthPlugin());
+
+    // ── Resolve Chromium binary path (same logic as startRegistration) ──
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || null;
+    if (executablePath) {
+      console.log(`[2FA] Using PUPPETEER_EXECUTABLE_PATH env: ${executablePath}`);
+    }
+
+    if (!executablePath) {
+      const chromiumPathFile = path.resolve('.chromium-path');
+      try {
+        if (fs.existsSync(chromiumPathFile)) {
+          const cached = fs.readFileSync(chromiumPathFile, 'utf8').trim();
+          if (cached && fs.existsSync(cached)) { executablePath = cached; }
+        }
+      } catch (_) {}
+    }
+
+    if (!executablePath) {
+      const playwrightCacheDir = path.join(
+        process.env.PLAYWRIGHT_BROWSERS_PATH ||
+          (process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache')),
+        'ms-playwright'
+      );
+      try {
+        if (fs.existsSync(playwrightCacheDir)) {
+          for (const entry of fs.readdirSync(playwrightCacheDir)) {
+            if (!entry.startsWith('chromium') || entry.includes('headless')) continue;
+            for (const sub of ['chrome-linux64', 'chrome-linux']) {
+              const bin = path.join(playwrightCacheDir, entry, sub, 'chrome');
+              if (fs.existsSync(bin)) { executablePath = bin; break; }
+            }
+            if (executablePath) break;
+          }
+        }
+      } catch (e) { console.log(`[2FA] Cache scan failed: ${e.message}`); }
+    }
+
+    if (!executablePath) {
+      try {
+        const pwPath = chromium.executablePath();
+        if (pwPath && fs.existsSync(pwPath)) executablePath = pwPath;
+      } catch (_) {}
+    }
+
+    if (!executablePath) {
+      console.log('[2FA] No Playwright chromium found — falling back to Puppeteer auto-discovery');
+    } else {
+      console.log(`[2FA] Using Chromium at: ${executablePath}`);
+    }
 
     const launchOptions = {
       headless: 'new',
+      ...(executablePath ? { executablePath } : {}),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -4576,7 +4630,7 @@ export async function submit2FAOTP(creds, twoFactorOtp, proxyInput = null) {
       launchOptions.args.push(`--proxy-server=${proxyServer}`);
     }
 
-    browser = await puppeteer.default.launch(launchOptions);
+    browser = await puppeteer.launch(launchOptions);
     page = await browser.newPage();
 
     // ── Set iOS viewport ──
