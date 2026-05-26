@@ -4266,9 +4266,8 @@ export async function submitUsername(username) {
 
     let setupMsg = '🎉 *Account Created!*\n\n';
     if (totpKey) {
-      setupMsg += `🔐 *2FA Authenticator Key:* \`${totpKey}\`\n\n`;
-      setupMsg += '📲 *Next step:* Add this key to your authenticator app (Google Authenticator, Authy, etc.) and send the 6-digit OTP here.\n\n';
-      setupMsg += '⚠️ _Do NOT close this chat — just type the 6-digit code._';
+      setupMsg += '🔐 *2FA Setup Key:* Ready — tap the 🔐 2FA Setup button below to reveal it and complete setup.\n\n';
+      setupMsg += '📲 *Next step:* Tap the button, add the key to your authenticator app, then send the 6-digit OTP.';
     } else {
       setupMsg += '⚙️ *2FA:* Could not auto-extract the authenticator key.\n';
       setupMsg += 'To get it manually:\n1. Log in → Settings → Account Center\n2. Password and security → Two-factor authentication\n3. Select account → Authentication app → Copy the setup key\n\n';
@@ -4420,9 +4419,8 @@ export async function submitOTP(otp) {
 
       let setupMsg = '🎉 *Account Created!*\n\n';
       if (totpKeyOtpVal) {
-        setupMsg += `🔐 *2FA Authenticator Key:* \`${totpKeyOtpVal}\`\n\n`;
-        setupMsg += '📲 *Next step:* Add this key to your authenticator app (Google Authenticator, Authy, etc.) and send the 6-digit OTP here.\n\n';
-        setupMsg += '⚠️ _Do NOT close this chat — just type the 6-digit code._';
+        setupMsg += '🔐 *2FA Setup Key:* Ready — tap the 🔐 2FA Setup button below to reveal it and complete setup.\n\n';
+        setupMsg += '📲 *Next step:* Tap the button, add the key to your authenticator app, then send the 6-digit OTP.';
       } else {
         setupMsg += '⚙️ *2FA:* Could not auto-extract the authenticator key.\n';
         setupMsg += 'To get it manually:\n1. Log in → Settings → Account Center\n2. Password and security → Two-factor authentication\n3. Select account → Authentication app → Copy the setup key\n\n';

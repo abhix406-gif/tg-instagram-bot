@@ -380,9 +380,6 @@ export async function createBot() {
         } else if (userResult.success && (userResult.step === 'complete' || userResult.step === '2fa_setup')) {
           const tfm = userResult.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
           ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email: ctx.session.email, password: ctx.session.password, totpKey: tfm?.[1] || userResult._totpKey || null } };
-          if (userResult.step === '2fa_setup' && (tfm?.[1] || userResult._totpKey)) {
-            ctx.session.step = 'waiting_2fa_otp';
-          }
         } else {
           ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: null };
         }
@@ -391,18 +388,12 @@ export async function createBot() {
       } else if (nameResult.step === 'complete' || nameResult.step === '2fa_setup') {
         const tfm2 = nameResult.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
         ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email: ctx.session.email, password: ctx.session.password, totpKey: tfm2?.[1] || nameResult._totpKey || null } };
-        if (nameResult.step === '2fa_setup' && (tfm2?.[1] || nameResult._totpKey)) {
-          ctx.session.step = 'waiting_2fa_otp';
-        }
       }
     } else if (passResult.step === 'otp_required') {
       ctx.session.step = 'waiting_otp';
     } else if (passResult.step === 'complete' || passResult.step === '2fa_setup') {
       const tfm3 = passResult.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
       ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email: ctx.session.email, password: ctx.session.password, totpKey: tfm3?.[1] || passResult._totpKey || null } };
-      if (passResult.step === '2fa_setup' && (tfm3?.[1] || passResult._totpKey)) {
-        ctx.session.step = 'waiting_2fa_otp';
-      }
     }
   }
 
@@ -655,9 +646,6 @@ export async function createBot() {
       if (result2.success && (result2.step === 'complete' || result2.step === '2fa_setup')) {
         const tfmStepReg = result2.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
         ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email, password: 'Pending', totpKey: tfmStepReg?.[1] || result2._totpKey || null } };
-        if (result2.step === '2fa_setup' && (tfmStepReg?.[1] || result2._totpKey)) {
-          ctx.session.step = 'waiting_2fa_otp';
-        }
       } else if (result2.success) {
         ctx.session.step = 'waiting_otp';
       } else {
@@ -692,9 +680,6 @@ export async function createBot() {
       } else if (result.success && (result.step === 'complete' || result.step === '2fa_setup')) {
         const tfmEC = result.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
         ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email: ctx.session.email, password: ctx.session.password, totpKey: tfmEC?.[1] || result._totpKey || null } };
-        if (result.step === '2fa_setup' && (tfmEC?.[1] || result._totpKey)) {
-          ctx.session.step = 'waiting_2fa_otp';
-        }
       }
       // On error, keep session so user can retry entering the code
       // Only reset on complete or if session truly expired
@@ -741,9 +726,6 @@ export async function createBot() {
       } else if (result.success && (result.step === 'complete' || result.step === '2fa_setup')) {
         const tfmName = result.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
         ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email: ctx.session.email, password: ctx.session.password, totpKey: tfmName?.[1] || result._totpKey || null } };
-        if (result.step === '2fa_setup' && (tfmName?.[1] || result._totpKey)) {
-          ctx.session.step = 'waiting_2fa_otp';
-        }
       }
       // On error, keep session so user can retry with a different name
       return;
@@ -767,9 +749,6 @@ export async function createBot() {
       } else if (result.success && (result.step === 'complete' || result.step === '2fa_setup')) {
         const tfmUser = result.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
         ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email: ctx.session.email, password: ctx.session.password, totpKey: tfmUser?.[1] || result._totpKey || null } };
-        if (result.step === '2fa_setup' && (tfmUser?.[1] || result._totpKey)) {
-          ctx.session.step = 'waiting_2fa_otp';
-        }
       }
       // On error, keep session so user can retry with a different username
       return;
@@ -790,9 +769,6 @@ export async function createBot() {
       if (result.success && (result.step === 'complete' || result.step === '2fa_setup')) {
         const tfmOtp = result.message.match(/2FA.*(?:Key|Authenticator|Setup).*?`([A-Z2-7]{16,52})`/i);
         ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: { email: ctx.session.email, password: ctx.session.password, totpKey: tfmOtp?.[1] || result._totpKey || null } };
-        if (result.step === '2fa_setup' && (tfmOtp?.[1] || result._totpKey)) {
-          ctx.session.step = 'waiting_2fa_otp';
-        }
       }
       return;
     }
