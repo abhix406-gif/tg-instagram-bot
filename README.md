@@ -1,20 +1,31 @@
-# Telegram Instagram Account Registration Bot
+# 🤖 TgInsta — Instagram Auto Creator Bot
 
-A Telegram bot that creates Instagram accounts using email OTP verification via browser automation (Playwright).
+> **Fast, automated Instagram account creation via Telegram** — powered by Playwright browser automation, smart proxy rotation, and built-in 2FA setup.
 
-## Disclaimer
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Deploy](https://img.shields.io/badge/Deploy-Render.com-46E3B7)](https://render.com)
 
-Only create Instagram accounts that you own or are authorized to manage. Mass account creation violates Instagram's Terms of Service. Use responsibly.
+---
 
-## Prerequisites
+## ✨ Features
 
-- Node.js 18 or newer
-- A Telegram bot token from [@BotFather](https://t.me/BotFather)
-- A working email address for OTP verification
+| Feature | Description |
+|---|---|
+| 📝 **Account Registration** | Full Instagram signup flow — email, password, name, username, OTP |
+| ⚡ **Bulk Mode** | Paste all details at once (name, username, password, email) for one-shot creation |
+| 🌍 **Smart Proxies** | Multi-provider proxy pool with auto health check, country routing, and lowest-latency selection |
+| 🔐 **2FA Setup** | Scrapes the TOTP authenticator key after registration and activates 2FA on the account |
+| 📊 **Proxy Dashboard** | Live health status for every proxy provider right from the bot |
+| 🚀 **Render-Ready** | Deploy to Render.com free tier with zero manual config — auto-detects webhook mode |
 
-## Setup
+---
+
+## 🚀 Quick Start
 
 ```bash
+git clone https://github.com/abhix406-gif/tg-instagram-bot.git
+cd tg-instagram-bot
 npm install
 copy .env.example .env
 ```
@@ -25,42 +36,51 @@ Set your Telegram token in `.env`:
 TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 ```
 
-## How It Works
-
-The bot uses Playwright to automate Instagram's sign-up flow:
-
-1. Send `/register` in Telegram
-2. Send your email address
-3. The bot opens Instagram signup in a headless browser
-4. You receive a verification code at your email
-5. Send the 6-digit OTP to the bot
-6. The bot submits the OTP and creates the account
-
-## Usage
-
-| Command | Description |
-|---|---|
-| `/start` | Show the main menu |
-| `/register` | Start Instagram registration |
-| `/list` | View active registrations |
-| `/cancel` | Cancel current operation |
-| `/help` | Show help |
-
-## Run
+Then run:
 
 ```bash
 npm start
 ```
 
-For development:
+---
 
-```bash
-npm run dev
-```
+## ☁️ Deploy to Render (Free — No Credit Card)
 
-## Notes
+1. Fork/push the repo to GitHub
+2. On [Render.com](https://render.com), click **New → Web Service → Connect your repo**
+3. Render auto-detects [`render.yaml`](render.yaml) — just add `TELEGRAM_BOT_TOKEN` (and optional `PROXY_PROVIDERS`)
+4. Deploy! Your bot runs 24/7 on the free tier.
 
-- Make sure your email can receive Instagram's OTP
-- Check your spam folder if OTP doesn't arrive
-- After registration, you may need to complete profile setup (username, password, birthday) manually
-- Sessions are kept alive in memory while waiting for OTP
+See [`DEPLOY.md`](DEPLOY.md) for detailed instructions.
+
+---
+
+## 📖 Commands
+
+| Command | Description |
+|---|---|
+| `/start` | Show welcome screen with keyboard |
+| `/register` | Start a new Instagram registration |
+| `/2fa` | Complete 2FA authenticator app setup |
+| `/proxy US` | Lock proxy to a specific country |
+| `/proxystatus` | Check proxy provider health |
+| `/noproxy` | Disable proxy |
+| `/countries` | List supported proxy countries |
+| `/otp` | Enter a 6-digit OTP code |
+| `/cancel` | Cancel current operation |
+| `/help` | Show full usage guide |
+
+---
+
+## ⚠️ Disclaimer
+
+Only create Instagram accounts that you own or are authorized to manage. Mass account creation violates Instagram's Terms of Service. Use responsibly.
+
+---
+
+## 🛠️ Tech Stack
+
+- **[Telegraf](https://telegraf.js.org/)** — Telegram Bot framework
+- **[Playwright](https://playwright.dev/)** — Browser automation for Instagram signup
+- **[Express](https://expressjs.com/)** — Webhook server for cloud deployment
+- **Node.js 18+** — ES modules throughout

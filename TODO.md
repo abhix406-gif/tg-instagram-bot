@@ -1,4 +1,4 @@
-# TgWhatsapp - Progress
+# TgInsta - Progress
 
 ## Steps
 - [x] Gather repo understanding (entrypoint, scripts, telegram/whatsapp modules)

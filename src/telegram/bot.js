@@ -45,15 +45,17 @@ export async function createBot() {
   bot.start(async (ctx) => {
     ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: null };
     await replyWithKeyboard(ctx,
-      '📸 *Instagram Auto Creator*\n\n' +
-      'Tap a button below or send /register to create an account.\n\n' +
+      '🤖 *TgInsta — Instagram Auto Creator*\n\n' +
+      '⚡ *Fastest way to create Instagram accounts* — powered by browser automation & smart proxies.\n\n' +
       '🔹 *Bulk mode* — send all details at once:\n' +
       '`First name: David`\n' +
       '`Login: david_2024`\n' +
       '`Password: Str0ngP@ss`\n' +
       '`Email: test@gmail.com`\n\n' +
       '🔹 *Step-by-step* — send just an email and follow prompts.\n\n' +
-      'Optional: `/proxy US` for a country-based proxy.',
+      '🌍 *Proxy Auto‑Select* — taps the lowest‑latency IP from your pool on every registration.\n\n' +
+      '🛡️ *2FA Setup* — scrapes the authenticator key & activates 2FA for your new accounts.\n\n' +
+      'Tap 📝 Register to begin, or /help for the full guide.',
       { parse_mode: 'Markdown' }
     );
   });
@@ -64,7 +66,7 @@ export async function createBot() {
     ctx.session.step = 'waiting_details';
     const countries = SUPPORTED_COUNTRIES.slice(0, 12).join(', ').toUpperCase();
     await ctx.reply(
-      '📧 *Send your account details*\n\n' +
+      '📧 *TgInsta — New Account Registration*\n\n' +
       '🔹 *Bulk* — paste all details together:\n' +
       '`First name: YourName`\n' +
       '`Login: your_username`\n' +
@@ -250,7 +252,7 @@ export async function createBot() {
 
   async function handleHelp(ctx) {
     await replyWithKeyboard(ctx,
-      '📸 *Help*\n\n' +
+      '🤖 *TgInsta — Help & Commands*\n\n' +
       '🔹 *Bulk registration (fastest)*:\n' +
       'Send /register then paste all fields:\n' +
       '`First name: David`\n' +
@@ -287,7 +289,7 @@ export async function createBot() {
   async function handle2fa(ctx) {
     if (!ctx.session.creds || !ctx.session.creds.email) {
       await ctx.reply(
-        '🔐 *2FA Authenticator Setup*\n\n' +
+        '🔐 *TgInsta — 2FA Authenticator Setup*\n\n' +
         'No active account credentials found. 2FA setup is available after a successful registration.\n\n' +
         'How it works:\n' +
         '1. After registration, the bot provides a 2FA setup key\n' +
@@ -302,7 +304,7 @@ export async function createBot() {
     }
 
     ctx.session.step = 'waiting_2fa_otp';
-    let authMsg = '🔐 *2FA Authenticator Setup*\n\n';
+    let authMsg = '🔐 *TgInsta — 2FA Authenticator Setup*\n\n';
     authMsg += `👤 Account: \`${ctx.session.creds.email}\`\n`;
     if (ctx.session.creds.totpKey) {
       authMsg += `🔑 Key: \`${ctx.session.creds.totpKey}\`\n`;
@@ -802,16 +804,16 @@ export async function createBot() {
 
   // ── Register bot commands in Telegram's menu (the "/" dropdown) ──
   await bot.telegram.setMyCommands([
-    { command: 'start', description: 'Start the bot' },
-    { command: 'register', description: 'Create a new Instagram account' },
-    { command: '2fa', description: 'Complete 2FA authenticator app setup' },
-    { command: 'proxy', description: 'Set proxy country (e.g., /proxy US)' },
-    { command: 'proxystatus', description: 'Check health of all proxy providers' },
-    { command: 'noproxy', description: 'Disable proxy, use your own IP' },
-    { command: 'countries', description: 'See all supported proxy countries' },
-    { command: 'otp', description: 'Enter a 6-digit OTP code' },
-    { command: 'cancel', description: 'Cancel current registration' },
-    { command: 'help', description: 'Show help and usage guide' },
+    { command: 'start', description: '🚀 Start TgInsta' },
+    { command: 'register', description: '📝 Create a new Instagram account' },
+    { command: '2fa', description: '🔐 Complete 2FA authenticator app setup' },
+    { command: 'proxy', description: '🌍 Set proxy country (e.g., /proxy US)' },
+    { command: 'proxystatus', description: '📊 Check health of all proxy providers' },
+    { command: 'noproxy', description: '🔓 Disable proxy, use your own IP' },
+    { command: 'countries', description: '🌐 See all supported proxy countries' },
+    { command: 'otp', description: '🔢 Enter a 6-digit OTP code' },
+    { command: 'cancel', description: '❌ Cancel current registration' },
+    { command: 'help', description: '❓ Show help and usage guide' },
   ]);
 
   return bot;

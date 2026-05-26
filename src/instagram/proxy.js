@@ -347,7 +347,7 @@ function testOneProxy(proxy, timeoutMs = HEALTH_TIMEOUT_MS) {
       headers: {
         Host: `${targetHost}:${targetPort}`,
         'Proxy-Authorization': authHeader,
-        'User-Agent': 'TgWhatsapp-ProxyTester/2.0',
+        'User-Agent': 'TgInsta-ProxyTester/2.0',
       },
       timeout: timeoutMs,
     });
@@ -370,7 +370,7 @@ function testOneProxy(proxy, timeoutMs = HEALTH_TIMEOUT_MS) {
         path: '/?format=json',
         socket,
         agent: false,
-        headers: { Host: targetHost, 'User-Agent': 'TgWhatsapp-ProxyTester/2.0' },
+        headers: { Host: targetHost, 'User-Agent': 'TgInsta-ProxyTester/2.0' },
         timeout: timeoutMs,
       }, (response) => {
         let data = '';
@@ -788,7 +788,7 @@ export async function getApiProxy(providerLabel, { timeoutMs = 10_000 } = {}) {
       path: url.pathname + url.search,
       method: 'GET',
       headers: {
-        'User-Agent': 'TgWhatsapp-ProxyFetcher/2.0',
+        'User-Agent': 'TgInsta-ProxyFetcher/2.0',
         ...(provider.username ? { 'Authorization': `Basic ${Buffer.from(`${provider.username}:${provider.password}`).toString('base64')}` } : {}),
       },
       timeout: timeoutMs,
