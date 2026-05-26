@@ -28,7 +28,7 @@ git push -u origin main
 3. Connect your GitHub repo
 4. Render reads `render.yaml` and auto-creates:
    - A **Web Service** on port 3000
-   - Build: `npm install` + `playwright install chromium`
+   - Build: `npm install` + `playwright install chromium` + `puppeteer browsers install chrome`
    - Start: `node src/index.js`
 
 ### Step 3: Set Environment Variables

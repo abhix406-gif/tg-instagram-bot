@@ -866,8 +866,14 @@ export async function startRegistration(formData, proxyInput = null) {
       ? localeForCountry(proxy.country)
       : { locale: 'en-US', timezone: 'America/New_York' };
 
+    // Use Playwright's already-installed Chromium binary (avoids a separate
+    // ~300 MB puppeteer chrome download on Render's disk-limited free tier).
+    const executablePath = chromium.executablePath();
+    console.log(`Using Chromium at: ${executablePath}`);
+
     const launchOptions = {
       headless: true,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
