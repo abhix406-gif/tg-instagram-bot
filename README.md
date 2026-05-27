@@ -46,10 +46,12 @@ npm start
 
 ## ☁️ Deploy to Render (Free — No Credit Card)
 
+> ⚠️ **For 24/7 uptime:** Render's free tier sleeps after 15 min of inactivity. Set up [UptimeRobot](https://uptimerobot.com) (free) to ping `https://YOUR-APP.onrender.com/ping` every 5 minutes. See [`DEPLOY.md`](DEPLOY.md) for full step-by-step.
+
 1. Fork/push the repo to GitHub
 2. On [Render.com](https://render.com), click **New → Web Service → Connect your repo**
-3. Render auto-detects [`render.yaml`](render.yaml) — just add `TELEGRAM_BOT_TOKEN` (and optional `PROXY_PROVIDERS`)
-4. Deploy! Your bot runs 24/7 on the free tier.
+3. Render auto-detects [`render.yaml`](render.yaml) — just add `TELEGRAM_BOT_TOKEN`, `WEBHOOK_BASE_URL` (and optional `PROXY_PROVIDERS`)
+4. Deploy! Then set up UptimeRobot to prevent idle sleep.
 
 See [`DEPLOY.md`](DEPLOY.md) for detailed instructions.
 
