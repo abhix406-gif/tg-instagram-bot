@@ -1,6 +1,7 @@
 import { createBot } from './telegram/bot.js';
 import { resetDeviceTracker } from './instagram/registration.js';
 import { attachBotToWebhook, createWebhookServer } from './telegram/webhook_server.js';
+import { startKeepAlive, stopKeepAlive } from './keepalive.js';
 import 'dotenv/config';
 
 // Global crash guards – prevent WhatsApp/network errors from killing the bot
@@ -24,6 +25,11 @@ const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL
 const RUN_MODE = WEBHOOK_BASE_URL ? 'webhook' : 'polling';
 const PORT = Number(process.env.PORT || 3000);
 
+// Secret token for webhook verification (prevents unauthorized POSTs)
+// Auto-generate a random one if not set, but prefer env var for persistence
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET_TOKEN
+  || Buffer.from(Date.now().toString(36)).toString('base64url').slice(0, 32);
+
 async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`  📸 Instagram Bot — ${RUN_MODE.toUpperCase()} MODE`);
@@ -38,6 +44,7 @@ async function main() {
   // Graceful shutdown handler (works for both modes)
   async function shutdown() {
     console.log('\n  ⏹️  Shutting down...');
+    stopKeepAlive();
     if (RUN_MODE === 'webhook') {
       await bot.telegram.deleteWebhook();
     }
@@ -59,12 +66,21 @@ async function main() {
     // Start Express server
     const server = await createWebhookServer(PORT);
 
+    // 24/7 keep-alive: self-ping every 10 min to prevent Render idle spin-down
+    startKeepAlive(PORT);
+
     // Register webhook with Telegram
-    await bot.telegram.setWebhook(webhookUrl, { drop_pending_updates: true });
+    // drop_pending_updates: false — DON'T discard messages sent while bot was starting up
+    // secret_token — verifies incoming webhook POSTs are genuinely from Telegram
+    await bot.telegram.setWebhook(webhookUrl, {
+      drop_pending_updates: false,
+      secret_token: WEBHOOK_SECRET,
+    });
     console.log(`  ✅ Webhook registered — bot is LIVE`);
   } else {
     // ── Polling mode (local) ──
-    await bot.launch({ dropPendingUpdates: true });
+    // dropPendingUpdates: false — DON'T discard messages that arrived during startup
+    await bot.launch({ dropPendingUpdates: false });
     console.log('  ✅ Bot is running (polling mode)');
   }
 

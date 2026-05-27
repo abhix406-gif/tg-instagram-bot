@@ -10,12 +10,16 @@ services:
     runtime: node
     buildCommand: |
       npm install
-      npx playwright install chromium
-      CHROMIUM_BIN=$(find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1)
+      npx puppeteer browsers install chrome
+      CHROMIUM_BIN=$(find /opt/render/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1)
+      if [ -z "$CHROMIUM_BIN" ]; then
+        npx playwright install chromium
+        CHROMIUM_BIN=$(find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1)
+      fi
       echo "$CHROMIUM_BIN" > .chromium-path
       echo "Chromium binary at: $CHROMIUM_BIN"
     startCommand: |
-      export PUPPETEER_EXECUTABLE_PATH=$(cat .chromium-path 2>/dev/null || find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1)
+      export PUPPETEER_EXECUTABLE_PATH=$(cat .chromium-path 2>/dev/null || find /opt/render/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1 || find /opt/render/.cache/ms-playwright -name chrome -type f -path "*/chrome-linux*/chrome" 2>/dev/null | head -1)
       echo "PUPPETEER_EXECUTABLE_PATH=$PUPPETEER_EXECUTABLE_PATH"
       node src/index.js
     plan: free
@@ -26,9 +30,13 @@ services:
         sync: false
       - key: PROXY_PROVIDERS
         sync: false
+      - key: KEEP_ALIVE
+        value: "true"
       - key: PORT
         value: "3000"
       - key: NODE_ENV
         value: "production"
+      - key: RENDER
+        value: "true"
     autoDeploy: true
     healthCheckPath: /health

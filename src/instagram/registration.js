@@ -821,6 +821,38 @@ async function _scrapeInstagramError(page) {
   }
 }
 
+/**
+ * Recursively scan a cache directory for a browser executable.
+ * @param {string} dir - Root cache directory
+ * @param {string|RegExp} match - Entry name prefix (e.g. 'chrome') or regex to match
+ * @returns {string|null} Full path to executable or null
+ */
+function findBrowserExecutable(dir, match) {
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const testMatch = typeof match === 'string'
+          ? entry.name.startsWith(match)
+          : match.test(entry.name);
+        if (!testMatch) continue;
+        // Look inside for common linux browser binary paths
+        for (const sub of ['chrome-linux64', 'chrome-linux', 'linux-148.0.7778.167', '']) {
+          const candidate = sub ? path.join(fullPath, sub, 'chrome') : fullPath;
+          if (fs.existsSync(candidate)) return candidate;
+        }
+        // Deep scan one level
+        const nested = findBrowserExecutable(fullPath, match);
+        if (nested) return nested;
+      } else if (entry.isFile() && entry.name === 'chrome') {
+        return fullPath;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 export async function startRegistration(formData, proxyInput = null) {
   const { fullName, email, password } = formData;
 
@@ -891,6 +923,17 @@ export async function startRegistration(formData, proxyInput = null) {
     }
 
     if (!executablePath) {
+      // Scan Puppeteer's own Chrome cache (npx puppeteer browsers install chrome)
+      const puppeteerCacheDir = path.join(os.homedir(), '.cache', 'puppeteer');
+      try {
+        if (fs.existsSync(puppeteerCacheDir)) {
+          const bin = findBrowserExecutable(puppeteerCacheDir, 'chrome');
+          if (bin) executablePath = bin;
+        }
+      } catch (e) { console.log(`[browser] Puppeteer cache scan failed: ${e.message}`); }
+    }
+
+    if (!executablePath) {
       const playwrightCacheDir = path.join(
         process.env.PLAYWRIGHT_BROWSERS_PATH ||
           (process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache')),
@@ -898,16 +941,10 @@ export async function startRegistration(formData, proxyInput = null) {
       );
       try {
         if (fs.existsSync(playwrightCacheDir)) {
-          for (const entry of fs.readdirSync(playwrightCacheDir)) {
-            if (!entry.startsWith('chromium') || entry.includes('headless')) continue;
-            for (const sub of ['chrome-linux64', 'chrome-linux']) {
-              const bin = path.join(playwrightCacheDir, entry, sub, 'chrome');
-              if (fs.existsSync(bin)) { executablePath = bin; break; }
-            }
-            if (executablePath) break;
-          }
+          const bin = findBrowserExecutable(playwrightCacheDir, /^chromium(?!.*headless)/);
+          if (bin) executablePath = bin;
         }
-      } catch (e) { console.log(`[browser] Cache scan failed: ${e.message}`); }
+      } catch (e) { console.log(`[browser] Playwright cache scan failed: ${e.message}`); }
     }
 
     if (!executablePath) {
@@ -918,9 +955,9 @@ export async function startRegistration(formData, proxyInput = null) {
     }
 
     if (!executablePath) {
-      console.log('[browser] No Playwright chromium found — falling back to Puppeteer auto-discovery');
+      console.log('[browser] No Chromium/Chrome found — will rely on Puppeteer auto-discovery');
     } else {
-      console.log(`[browser] Using Chromium at: ${executablePath}`);
+      console.log(`[browser] Using Chromium/Chrome at: ${executablePath}`);
     }
 
     const launchOptions = {
@@ -4832,88 +4869,240 @@ export async function submit2FAOTP(creds, twoFactorOtp, proxyInput = null) {
       await delay(3000 + Math.random() * 2000);
     }
 
-    // ── Enter OTP from authenticator app ──
-    console.log(`[2FA] Entering authenticator OTP: ${cleanOtp}`);
-    const allInputs = await page.$$('input:not([type="hidden"]):not([type="submit"])');
+    // ── Phase 1: Detect what screen we're on ──
+    // After clicking "Authentication App", Instagram shows a QR code + setup key screen.
+    // We must enter the TOTP setup key first, click Next, then the OTP input appears.
+    const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 3000) || '');
+    const isQrScreen = /qr\s*code|scan\s*the|point\s*your/i.test(bodyText);
+    const isOtpScreen = /enter\s*(the\s*)?(6[-\s]?digit|verification|confirmation)\s*code|authenticator\s*(app\s*)?code/i.test(bodyText);
+    console.log(`[2FA] Screen detection — QR: ${isQrScreen}, OTP: ${isOtpScreen}`);
+
     let otpEntered = false;
 
-    // Try single input first
-    for (const inp of allInputs) {
-      const box = await inp.boundingBox().catch(() => null);
-      if (!box) continue;
-      const type = await inp.evaluate(el => el.type || '').catch(() => '');
-      if (type === 'tel' || type === 'text' || type === 'number') {
-        await inp.click({ clickCount: 3 });
-        await inp.type(cleanOtp, { delay: 100 + Math.random() * 150 });
-        otpEntered = true;
-        console.log('[2FA] Entered OTP into single input');
-        break;
-      }
-    }
+    // ── Phase 2: If on QR/setup-key screen, enter setup key first ──
+    if (!isOtpScreen && totpKey) {
+      console.log('[2FA] On setup-key screen. Entering TOTP setup key...');
 
-    // Fallback: 6 individual digit boxes
-    if (!otpEntered) {
-      const digitInputs = await page.$$('input[maxlength="1"]');
-      if (digitInputs.length >= 6) {
-        for (let i = 0; i < 6; i++) {
-          await delay(200 + Math.random() * 400);
-          await digitInputs[i].click({ clickCount: 3 });
-          await digitInputs[i].type(cleanOtp[i], { delay: 100 + Math.random() * 150 });
+      // 2a. Check if "Try another way" / "Can't scan QR" link needs clicking to reveal text input
+      const manualLinkClicked = await page.evaluate(() => {
+        const els = document.querySelectorAll('button, a, span, div[role="button"], div[role="link"]');
+        for (const el of els) {
+          const text = (el.textContent || '').trim();
+          if (/try\s*another\s*way|can'?t\s*scan|enter\s*manually|use\s*another\s*method|setup\s*key/i.test(text) && el.offsetParent !== null) {
+            el.click();
+            return true;
+          }
         }
-        otpEntered = true;
-        console.log('[2FA] Entered OTP into 6 individual boxes');
+        return false;
+      });
+      if (manualLinkClicked) {
+        console.log('[2FA] Clicked "Try another way" / manual entry link');
+        await delay(2000 + Math.random() * 1500);
       }
-    }
 
-    if (!otpEntered) {
-      // Try to find and enter the setup key first, then OTP
-      console.log('[2FA] No OTP input found. Trying to enter setup key first...');
-      if (totpKey) {
+      // 2b. Find the setup key input — it may have specific aria/placeholder hints
+      const setupKeyEntered = await page.evaluate((key) => {
+        // Priority 1: input with setup-key-related attributes
+        const prioritySelectors = [
+          'input[aria-label*="setup" i]',
+          'input[aria-label*="key" i]',
+          'input[aria-label*="manual" i]',
+          'input[placeholder*="setup" i]',
+          'input[placeholder*="key" i]',
+          'input[placeholder*="manual" i]',
+          'input[name*="setup" i]',
+          'input[name*="key" i]',
+          'input[id*="setup" i]',
+          'input[id*="key" i]',
+        ];
+        for (const sel of prioritySelectors) {
+          try {
+            const el = document.querySelector(sel);
+            if (el && el.offsetParent !== null) {
+              el.focus();
+              el.value = '';
+              return true; // Will be typed into by Playwright
+            }
+          } catch (_) {}
+        }
+
+        // Priority 2: any text/tel input that's visible (typically the only input on screen)
+        const allInputs = document.querySelectorAll('input:not([type="hidden"]):not([type="submit"])');
         for (const inp of allInputs) {
+          if (inp.offsetParent !== null && (inp.type === 'text' || inp.type === 'tel' || inp.type === 'number' || !inp.type)) {
+            inp.focus();
+            inp.value = '';
+            return true;
+          }
+        }
+        return false;
+      }, totpKey);
+
+      if (setupKeyEntered) {
+        // Now type the key using Playwright (more reliable than evaluate)
+        const visibleInputs = await page.$$('input:not([type="hidden"]):not([type="submit"])');
+        for (const inp of visibleInputs) {
+          const box = await inp.boundingBox().catch(() => null);
+          if (!box) continue;
+          const isFocused = await inp.evaluate(el => el === document.activeElement);
+          if (isFocused) {
+            await inp.type(totpKey, { delay: 60 + Math.random() * 80 });
+            console.log('[2FA] Entered TOTP setup key via Playwright');
+            break;
+          }
+        }
+      } else {
+        // Fallback: try typing into first visible input
+        console.log('[2FA] No focused setup-key input found, falling back to first visible input...');
+        const allVisibleInputs = await page.$$('input:not([type="hidden"]):not([type="submit"])');
+        for (const inp of allVisibleInputs) {
           const box = await inp.boundingBox().catch(() => null);
           if (!box) continue;
           await inp.click({ clickCount: 3 });
-          await inp.type(totpKey, { delay: 80 + Math.random() * 100 });
-          console.log('[2FA] Entered TOTP setup key');
+          await inp.type(totpKey, { delay: 60 + Math.random() * 80 });
+          console.log('[2FA] Entered TOTP setup key (fallback)');
           break;
         }
-        await delay(2000 + Math.random() * 1000);
+      }
 
-        // Click Next/Continue
-        const btns = await page.$$('button');
+      await delay(1500 + Math.random() * 1000);
+
+      // 2c. Click "Next" / "Continue" to proceed to OTP verification screen
+      const nextClicked = await page.evaluate(() => {
+        const btns = document.querySelectorAll('button, div[role="button"], a');
         for (const btn of btns) {
-          const text = await page.evaluate(el => el.textContent, btn);
-          if (text && /next|continue|confirm|done/i.test(text)) {
-            await btn.click();
-            console.log('[2FA] Clicked Next/Continue button');
-            break;
+          const text = (btn.textContent || '').trim();
+          if (/^(next|continue|confirm|done|submit)$/i.test(text) && btn.offsetParent !== null) {
+            btn.click();
+            return text;
           }
         }
-        await delay(3000 + Math.random() * 2000);
+        return null;
+      });
+      if (nextClicked) {
+        console.log(`[2FA] Clicked "${nextClicked}" button`);
+      } else {
+        // Broader search for any action button
+        await page.evaluate(() => {
+          const btns = document.querySelectorAll('button, div[role="button"]');
+          for (const btn of btns) {
+            const text = (btn.textContent || '').trim();
+            if (/next|continue|confirm|done|submit|verify|activate|turn\s*on/i.test(text) && btn.offsetParent !== null) {
+              btn.click();
+              return;
+            }
+          }
+        });
+        console.log('[2FA] Attempted broad button click');
+      }
 
-        // Now try entering OTP again
-        const freshInputs = await page.$$('input:not([type="hidden"]):not([type="submit"])');
-        for (const inp of freshInputs) {
+      // 2d. Wait for the OTP verification screen to appear
+      console.log('[2FA] Waiting for OTP verification screen...');
+      await delay(4000 + Math.random() * 3000);
+
+      // Log what we see now
+      const postSetupBody = await page.evaluate(() => document.body?.innerText?.slice(0, 2000) || '');
+      console.log('[2FA] Post-setup screen (first 400):', postSetupBody.slice(0, 400));
+    }
+
+    // ── Phase 3: Enter OTP on the verification screen ──
+    // This runs whether we were already on OTP screen or just navigated here after setup key
+
+    if (!otpEntered) {
+      console.log(`[2FA] Entering authenticator OTP: ${cleanOtp}`);
+
+      // Small extra wait for any animations / DOM updates
+      await delay(1000 + Math.random() * 500);
+
+      // Strategy A: Single OTP input (most common)
+      const allInputs = await page.$$('input:not([type="hidden"]):not([type="submit"])');
+      for (const inp of allInputs) {
+        const box = await inp.boundingBox().catch(() => null);
+        if (!box) continue;
+        const type = await inp.evaluate(el => el.type || '').catch(() => '');
+        // Accept text, tel, number — also check placeholder/aria for OTP hints
+        const attrs = await inp.evaluate(el => ({
+          placeholder: (el.getAttribute('placeholder') || '').toLowerCase(),
+          ariaLabel: (el.getAttribute('aria-label') || '').toLowerCase(),
+          name: (el.getAttribute('name') || '').toLowerCase(),
+          id: (el.getAttribute('id') || '').toLowerCase(),
+        })).catch(() => ({}));
+        const isOtpField =
+          type === 'tel' || type === 'text' || type === 'number' ||
+          /code|otp|verif|6.digit|auth|token/i.test(attrs.placeholder) ||
+          /code|otp|verif|6.digit|auth|token/i.test(attrs.ariaLabel) ||
+          /code|otp|verif|6.digit|auth|token/i.test(attrs.name) ||
+          /code|otp|verif|6.digit|auth|token/i.test(attrs.id);
+
+        // Also skip inputs that look like the setup key input (long text, setup/key hints)
+        const looksLikeSetupKey =
+          /setup|key|manual|secret/i.test(attrs.placeholder) ||
+          /setup|key|manual|secret/i.test(attrs.ariaLabel) ||
+          /setup|key|manual|secret/i.test(attrs.name) ||
+          /setup|key|manual|secret/i.test(attrs.id);
+
+        if (isOtpField && !looksLikeSetupKey) {
+          await inp.click({ clickCount: 3 });
+          await delay(200 + Math.random() * 300);
+          await inp.type(cleanOtp, { delay: 100 + Math.random() * 150 });
+          otpEntered = true;
+          console.log('[2FA] Entered OTP into single input');
+          break;
+        }
+      }
+
+      // Strategy B: 6 individual digit boxes
+      if (!otpEntered) {
+        const digitInputs = await page.$$('input[maxlength="1"]');
+        if (digitInputs.length >= 6) {
+          for (let i = 0; i < 6; i++) {
+            await delay(150 + Math.random() * 250);
+            await digitInputs[i].click({ clickCount: 3 });
+            await digitInputs[i].type(cleanOtp[i], { delay: 80 + Math.random() * 100 });
+          }
+          otpEntered = true;
+          console.log('[2FA] Entered OTP into 6 individual digit boxes');
+        }
+      }
+
+      // Strategy C: Broader search — any visible text/tel/number input
+      if (!otpEntered) {
+        console.log('[2FA] Strategy C: broader input search...');
+        const broadInputs = await page.$$('input:not([type="hidden"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"])');
+        for (const inp of broadInputs) {
           const box = await inp.boundingBox().catch(() => null);
           if (!box) continue;
           const type = await inp.evaluate(el => el.type || '').catch(() => '');
-          if (type === 'tel' || type === 'text' || type === 'number') {
+          if (type === 'tel' || type === 'text' || type === 'number' || !type) {
             await inp.click({ clickCount: 3 });
+            await delay(200 + Math.random() * 200);
             await inp.type(cleanOtp, { delay: 100 + Math.random() * 150 });
             otpEntered = true;
-            console.log('[2FA] Entered OTP after setup key');
+            console.log('[2FA] Entered OTP (Strategy C broad match)');
             break;
           }
         }
       }
+    }
 
-      if (!otpEntered) {
-        await browser.close();
-        return {
-          success: false,
-          message: '❌ Could not find OTP input on 2FA page. The account may not have 2FA setup initiated. Try logging in manually and setting up 2FA, then use the authenticator app.',
-        };
-      }
+    if (!otpEntered) {
+      // Dump page state for debugging
+      const debugBody = await page.evaluate(() => document.body?.innerText?.slice(0, 3000) || '');
+      const debugInputs = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('input:not([type="hidden"])')).map(el => ({
+          type: el.type, name: el.name, id: el.id,
+          placeholder: el.getAttribute('placeholder'),
+          ariaLabel: el.getAttribute('aria-label'),
+          visible: el.offsetParent !== null,
+        }));
+      });
+      console.log('[2FA] DEBUG page body:', debugBody.slice(0, 800));
+      console.log('[2FA] DEBUG inputs:', JSON.stringify(debugInputs, null, 2));
+      await browser.close();
+      return {
+        success: false,
+        message: `❌ Could not find OTP input on 2FA page. ${!totpKey ? 'No TOTP setup key available — run /register first to scrape the 2FA key.' : 'The authentication app setup flow may have changed. Try logging in manually and setting up 2FA, then use the authenticator app.'}`,
+      };
     }
 
     await delay(1500 + Math.random() * 1000);

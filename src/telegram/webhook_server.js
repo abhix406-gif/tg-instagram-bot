@@ -3,8 +3,39 @@ import express from 'express';
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
+// ── Webhook secret-token verification middleware ──
+// Telegram sends `X-Telegram-Bot-Api-Secret-Token` header on every webhook POST.
+// We validate it to reject unauthorized requests from anyone other than Telegram.
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET_TOKEN;
+if (WEBHOOK_SECRET) {
+  app.use('/telegram', (req, res, next) => {
+    // Only validate on POST (the actual webhook deliveries)
+    if (req.method === 'POST') {
+      const token = req.headers['x-telegram-bot-api-secret-token'];
+      if (!token || token !== WEBHOOK_SECRET) {
+        console.warn('[webhook] ⛔ Rejected unauthorized POST — invalid or missing secret token');
+        return res.status(403).send('Forbidden');
+      }
+    }
+    next();
+  });
+}
+
 // Health-check endpoint for cloud platforms (Render, Koyeb, etc.)
+// Also used by the built-in keep-alive self-pinger.
 app.get('/health', (_req, res) => res.status(200).send('OK'));
+
+// Uptime-monitor-friendly ping endpoint — returns JSON for external services
+// like UptimeRobot, Cron-job.org, or Freshping.
+// Usage: GET /ping → { "status": "ok", "uptime": process.uptime(), "timestamp": ISO }
+app.get('/ping', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    mode: process.env.WEBHOOK_BASE_URL || process.env.RENDER_EXTERNAL_URL ? 'webhook' : 'polling',
+  });
+});
 
 /**
  * Attach Telegraf's webhookCallback to the Express app.
