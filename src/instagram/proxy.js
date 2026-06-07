@@ -9,6 +9,7 @@
 //    • Instagram-safe IP preference (residential > datacenter)
 // =============================================================================
 
+import 'dotenv/config';
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
@@ -142,11 +143,36 @@ function parseLegacyProvider() {
   };
 }
 
-/** All configured providers */
-export const PROXY_PROVIDERS = parseProviderList();
+// ── Lazy-initialized providers (parsed on first access so dotenv is loaded) ──
+let _providers = null;
 
-/** Whether at least one provider is configured */
-export const HAS_PROXY = PROXY_PROVIDERS.length > 0;
+function getProviders() {
+  if (_providers === null) {
+    _providers = parseProviderList();
+    console.log(`[proxy] Loaded ${_providers.length} provider(s) from PROXY_PROVIDERS env`);
+  }
+  return _providers;
+}
+
+// Proxy-wrapped array: delegates all property access to getProviders() result
+export const PROXY_PROVIDERS = new Proxy([], {
+  get(_, prop) {
+    const arr = getProviders();
+    const val = arr[prop];
+    return typeof val === 'function' ? val.bind(arr) : val;
+  },
+  ownKeys(_)   { return Reflect.ownKeys(getProviders()); },
+  getOwnPropertyDescriptor(_, prop) { return Reflect.getOwnPropertyDescriptor(getProviders(), prop); },
+  has(_, prop) { return prop in getProviders(); },
+  set(_, prop, value) { getProviders()[prop] = value; return true; },
+});
+
+// Lazy boolean: truthy when providers exist
+export const HAS_PROXY = {
+  [Symbol.toPrimitive]() { return getProviders().length; },
+  toString() { return String(getProviders().length); },
+  valueOf() { return getProviders().length; },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. HEALTH TRACKING

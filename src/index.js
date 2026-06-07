@@ -79,14 +79,27 @@ async function main() {
     console.log(`  ✅ Webhook registered — bot is LIVE`);
   } else {
     // ── Polling mode (local) ──
-    // Delete any stale webhook first (Render may have set one)
-    try {
-      await bot.telegram.deleteWebhook({ drop_pending_updates: false });
-      console.log('  🧹 Cleared stale webhook');
-    } catch (_) { /* no webhook existed */ }
-    // dropPendingUpdates: false — DON'T discard messages that arrived during startup
-    await bot.launch({ dropPendingUpdates: false });
-    console.log('  ✅ Bot is running (polling mode)');
+    // Delete any stale webhook first, then retry if Render re-sets it
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await bot.telegram.deleteWebhook({ drop_pending_updates: false });
+        if (attempt === 0) console.log('  🧹 Cleared stale webhook');
+        else console.log(`  🧹 Cleared webhook (retry ${attempt})`);
+      } catch (_) { /* no webhook existed */ }
+      try {
+        // dropPendingUpdates: false — DON'T discard messages that arrived during startup
+        await bot.launch({ dropPendingUpdates: false });
+        console.log('  ✅ Bot is running (polling mode)');
+        break;
+      } catch (err) {
+        if (err?.response?.error_code === 409) {
+          console.log(`  ⚠️ Webhook conflict, retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        throw err;
+      }
+    }
   }
 
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
