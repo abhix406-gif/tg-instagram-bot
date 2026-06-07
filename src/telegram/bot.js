@@ -870,19 +870,35 @@ export async function createBot() {
   });
 
   // ── Register bot commands in Telegram's menu (the "/" dropdown) ──
-  await bot.telegram.setMyCommands([
-    { command: 'start', description: '🚀 Start TgInsta' },
-    { command: 'register', description: '📝 Create a new Instagram account' },
-    { command: '2fa', description: '🔐 Complete 2FA authenticator app setup' },
-    { command: 'proxy', description: '🌍 Set proxy country (e.g., /proxy US)' },
-    { command: 'proxystatus', description: '📊 Check health of all proxy providers' },
-    { command: 'proxycheck', description: '🩺 Deep health check + Instagram safety scan' },
-    { command: 'noproxy', description: '🔓 Disable proxy, use your own IP' },
-    { command: 'countries', description: '🌐 See all supported proxy countries' },
-    { command: 'otp', description: '🔢 Enter a 6-digit OTP code' },
-    { command: 'cancel', description: '❌ Cancel current registration' },
-    { command: 'help', description: '❓ Show help and usage guide' },
-  ]);
+  // Timeout after 15s — don't hang forever if Telegram API is slow
+  const ac = new AbortController();
+  const cmdTimer = setTimeout(() => ac.abort(), 15000);
+  try {
+    await bot.telegram.callApi('setMyCommands', {
+      commands: [
+        { command: 'start', description: '🚀 Start TgInsta' },
+        { command: 'register', description: '📝 Create a new Instagram account' },
+        { command: '2fa', description: '🔐 Complete 2FA authenticator app setup' },
+        { command: 'proxy', description: '🌍 Set proxy country (e.g., /proxy US)' },
+        { command: 'proxystatus', description: '📊 Check health of all proxy providers' },
+        { command: 'proxycheck', description: '🩺 Deep health check + Instagram safety scan' },
+        { command: 'noproxy', description: '🔓 Disable proxy, use your own IP' },
+        { command: 'countries', description: '🌐 See all supported proxy countries' },
+        { command: 'otp', description: '🔢 Enter a 6-digit OTP code' },
+        { command: 'cancel', description: '❌ Cancel current registration' },
+        { command: 'help', description: '❓ Show help and usage guide' },
+      ],
+    }, ac.signal);
+    console.log('  📋 Bot commands registered');
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      console.log('  ⚠️  setMyCommands timed out after 15s — continuing anyway');
+    } else {
+      console.log(`  ⚠️  setMyCommands failed (non-fatal): ${e.message}`);
+    }
+  } finally {
+    clearTimeout(cmdTimer);
+  }
 
   return bot;
 }

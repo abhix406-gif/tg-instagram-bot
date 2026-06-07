@@ -79,26 +79,51 @@ async function main() {
     console.log(`  ✅ Webhook registered — bot is LIVE`);
   } else {
     // ── Polling mode (local) ──
-    // Delete any stale webhook first, then retry if Render re-sets it
-    for (let attempt = 0; attempt < 5; attempt++) {
+    // Aggressive retry with webhook verification.
+    // Render can re-apply its webhook within 1–2 seconds, so we verify the delete worked.
+    const MAX_RETRIES = 30;
+    let launched = false;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      // Step 1: delete any existing webhook
       try {
-        await bot.telegram.deleteWebhook({ drop_pending_updates: false });
-        if (attempt === 0) console.log('  🧹 Cleared stale webhook');
-        else console.log(`  🧹 Cleared webhook (retry ${attempt})`);
-      } catch (_) { /* no webhook existed */ }
+        await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+        console.log(`  🧹 [attempt ${attempt + 1}/${MAX_RETRIES}] Webhook deleted`);
+      } catch (_) {
+        console.log(`  🧹 [attempt ${attempt + 1}/${MAX_RETRIES}] No webhook to delete`);
+      }
+
+      // Step 2: Verify webhook is ACTUALLY gone (Render may have re-applied it)
       try {
-        // dropPendingUpdates: false — DON'T discard messages that arrived during startup
+        const whInfo = await bot.telegram.getWebhookInfo();
+        if (whInfo.url && whInfo.url.length > 0) {
+          console.log(`  ⚠️  Render re-applied webhook: ${whInfo.url}`);
+          const wait = 500 + attempt * 200;
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+      } catch (_) { /* proceed */ }
+
+      // Step 3: launch polling
+      try {
         await bot.launch({ dropPendingUpdates: false });
         console.log('  ✅ Bot is running (polling mode)');
+        launched = true;
         break;
       } catch (err) {
         if (err?.response?.error_code === 409) {
-          console.log(`  ⚠️ Webhook conflict, retrying in 2s...`);
-          await new Promise(r => setTimeout(r, 2000));
+          const wait = Math.min(200 + attempt * 100, 1000);
+          console.log(`  ⚠️  [attempt ${attempt + 1}] 409 conflict — retrying in ${wait}ms...`);
+          await new Promise(r => setTimeout(r, wait));
           continue;
         }
         throw err;
       }
+    }
+    if (!launched) {
+      console.error('  ❌ Could not launch polling — Render keeps re-applying webhook');
+      console.error('     Stop the Render deployment first (render.com dashboard),');
+      console.error('     or set WEBHOOK_BASE_URL in .env for local webhook mode.');
+      process.exit(1);
     }
   }
 
