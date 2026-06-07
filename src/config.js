@@ -1,4 +1,10 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+loadEnv({ path: resolve(__dirname, '..', '.env') });
 
 export const config = {
   /** Telegram bot token from @BotFather */

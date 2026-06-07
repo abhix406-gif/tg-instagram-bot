@@ -697,14 +697,14 @@ async function resolveProxy(proxyInput, { sessionId } = {}) {
       return { ...p, isProvider: true };
     }
     // Treat plain string as country code — use multi-provider pool
-    const p = getProxyForCountry(proxyInput, { sessionId });
+    const p = await getProxyForCountry(proxyInput, { sessionId });
     if (!p) return null;
     return { ...p, isProvider: true };
   }
 
   if (typeof proxyInput === 'object') {
     if (proxyInput.country) {
-      const p = getProxyForCountry(proxyInput.country, { sessionId: proxyInput.sessionId || sessionId });
+      const p = await getProxyForCountry(proxyInput.country, { sessionId: proxyInput.sessionId || sessionId });
       if (!p) return null;
       return { ...p, isProvider: true };
     }
@@ -837,15 +837,20 @@ function findBrowserExecutable(dir, match) {
           ? entry.name.startsWith(match)
           : match.test(entry.name);
         if (!testMatch) continue;
-        // Look inside for common linux browser binary paths
-        for (const sub of ['chrome-linux64', 'chrome-linux', 'linux-148.0.7778.167', '']) {
-          const candidate = sub ? path.join(fullPath, sub, 'chrome') : fullPath;
-          if (fs.existsSync(candidate)) return candidate;
+        // Look inside for common browser binary paths (Linux + Windows)
+        for (const sub of [
+          'chrome-linux64', 'chrome-linux', 'linux-148.0.7778.167',
+          'chrome-win64', 'chrome-win', 'win64-148.0.7778.167', ''
+        ]) {
+          for (const exeName of ['chrome', 'chrome.exe']) {
+            const candidate = sub ? path.join(fullPath, sub, exeName) : path.join(fullPath, exeName);
+            if (fs.existsSync(candidate)) return candidate;
+          }
         }
         // Deep scan one level
         const nested = findBrowserExecutable(fullPath, match);
         if (nested) return nested;
-      } else if (entry.isFile() && entry.name === 'chrome') {
+      } else if (entry.isFile() && (entry.name === 'chrome' || entry.name === 'chrome.exe')) {
         return fullPath;
       }
     }
@@ -5122,7 +5127,7 @@ export async function submit2FAOTP(creds, twoFactorOtp, proxyInput = null) {
 
     // ── Check for success indicators ──
     const finalUrl = page.url();
-    const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '');
+    const finalBodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '');
 
     const successIndicators = [
       /two.factor.*(is on|enabled|active|set up)/i,
@@ -5133,7 +5138,7 @@ export async function submit2FAOTP(creds, twoFactorOtp, proxyInput = null) {
       /successfully/i,
     ];
 
-    const isSuccess = successIndicators.some(pattern => pattern.test(bodyText));
+    const isSuccess = successIndicators.some(pattern => pattern.test(finalBodyText));
 
     await browser.close();
 
@@ -5180,6 +5185,37 @@ export function getStatus() {
 
 export function getActiveProxy() {
   return activeSession.proxyInfo;
+}
+
+let _cancelInProgress = false;
+
+export async function forceCancelRegistration() {
+  if (_cancelInProgress) {
+    return { success: true, message: 'Cancel already in progress.' };
+  }
+  _cancelInProgress = true;
+  try {
+    if (activeSession.browser) {
+      try {
+        await activeSession.browser.close();
+      } catch (e) {
+        // Suppress "process not found" errors — browser was already gone
+        if (!/process.*not found/i.test(e.message)) {
+          console.log('[cancel] Browser close warning:', e.message);
+        }
+      }
+    }
+    activeSession.browser = null;
+    activeSession.page = null;
+    activeSession.email = null;
+    activeSession.proxyInfo = null;
+    activeSession.formData = null;
+    activeSession.acquiredCreds = null;
+    console.log('[cancel] Registration cancelled. Browser closed.');
+    return { success: true, message: 'Registration cancelled. Browser closed.' };
+  } finally {
+    _cancelInProgress = false;
+  }
 }
 
 // Simple delay helper (puppeteer doesn't have page.waitForTimeout)

@@ -1,6 +1,6 @@
 import { Telegraf, session, Markup } from 'telegraf';
-import { startRegistration, submitOTP, submitEmailCode, submitPassword, submitNameAndFinish, submitUsername, submit2FAOTP } from '../instagram/registration.js';
-import { SUPPORTED_COUNTRIES, normalizeCountry, HAS_PROXY, getProxySummary, healthCheckAll, getBestProxy } from '../instagram/proxy.js';
+import { startRegistration, submitOTP, submitEmailCode, submitPassword, submitNameAndFinish, submitUsername, submit2FAOTP, forceCancelRegistration } from '../instagram/registration.js';
+import { ALL_COUNTRIES, normalizeCountry, HAS_PROXY, getProxySummary, getWorldwideBestProxy, getProviderStatus, startPeriodicHealthMonitor, setMonitorChatId, resetProviderHealth } from '../instagram/proxy.js';
 
 export async function createBot() {
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -43,7 +43,8 @@ export async function createBot() {
 
   // Start
   bot.start(async (ctx) => {
-    ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: null };
+    const prevProxy = ctx.session?.proxy;
+    ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: prevProxy || null, bulkMode: false, username: null, creds: null };
     await replyWithKeyboard(ctx,
       '🤖 *TgInsta — Instagram Auto Creator*\n\n' +
       '⚡ *Fastest way to create Instagram accounts* — powered by browser automation & smart proxies.\n\n' +
@@ -64,7 +65,7 @@ export async function createBot() {
 
   async function handleRegister(ctx) {
     ctx.session.step = 'waiting_details';
-    const countries = SUPPORTED_COUNTRIES.slice(0, 12).join(', ').toUpperCase();
+    const countries = ALL_COUNTRIES.slice(0, 12).join(', ').toUpperCase();
     await ctx.reply(
       '📧 *TgInsta — New Account Registration*\n\n' +
       '🔹 *Bulk* — paste all details together:\n' +
@@ -82,7 +83,7 @@ export async function createBot() {
   }
 
   async function handleCountries(ctx) {
-    const all = SUPPORTED_COUNTRIES.map(c => `\`${c.toUpperCase()}\``).join(', ');
+    const all = ALL_COUNTRIES.map(c => `\`${c.toUpperCase()}\``).join(', ');
     await ctx.reply(`🌍 *Supported proxy countries:*\n\n${all}\n\nUse any in: \`name|email|password|country\``, { parse_mode: 'Markdown' });
   }
 
@@ -120,7 +121,7 @@ export async function createBot() {
       if (HAS_PROXY) {
         await ctx.reply('🔍 *Scanning proxies for best IP...*', { parse_mode: 'Markdown' });
         try {
-          const best = await getBestProxy();
+          const best = await getWorldwideBestProxy();
           if (best) {
             const flag = countryFlag(best.country);
             let msg = `🚀 *Auto-Proxy Mode Enabled*\n\n`;
@@ -161,7 +162,7 @@ export async function createBot() {
       if (HAS_PROXY) {
         await ctx.reply('🔍 *Scanning proxies for best IP...*', { parse_mode: 'Markdown' });
         try {
-          const best = await getBestProxy();
+          const best = await getWorldwideBestProxy();
           if (best) {
             const flag = countryFlag(best.country);
             let msg = `🚀 *Auto-Proxy Mode Enabled*\n\n`;
@@ -195,7 +196,7 @@ export async function createBot() {
 
     // Country argument passed (e.g., /proxy US)
     const cc = normalizeCountry(arg);
-    if (SUPPORTED_COUNTRIES.includes(cc)) {
+    if (ALL_COUNTRIES.includes(cc)) {
       ctx.session.proxy = cc.toUpperCase();
       ctx.session.step = ctx.session.step === 'waiting_proxy' ? 'idle' : ctx.session.step;
       await ctx.reply(`✅ Proxy country set: *${cc.toUpperCase()}*\n\nYour registrations will use a ${cc.toUpperCase()} IP.`, { parse_mode: 'Markdown' });
@@ -203,7 +204,7 @@ export async function createBot() {
     }
 
     // Unknown country — prompt with available list
-    const sample = SUPPORTED_COUNTRIES.slice(0, 8).join(', ').toUpperCase();
+    const sample = ALL_COUNTRIES.slice(0, 8).join(', ').toUpperCase();
     let msg = '📡 *Set Proxy Country*\n\n' +
       'Send a country code (2 letters):\n\n' +
       `Examples: \`US\`, \`IN\`, \`GB\`, \`DE\`\n` +
@@ -223,22 +224,79 @@ export async function createBot() {
   async function handleProxyStatus(ctx) {
     await ctx.reply('🔍 *Checking proxy health...*', { parse_mode: 'Markdown' });
     try {
-      const results = await healthCheckAll();
+      const status = await getProviderStatus();
       let msg = `📊 *Proxy Health Report*\n\n`;
-      msg += `✅ ${results.okCount} / ${results.total} healthy\n\n`;
-      for (const r of results.results) {
-        const icon = r.ok ? '✅' : '❌';
-        msg += `${icon} *${r.label}*`;
-        if (r.ok) {
-          msg += ` — IP: \`${r.ip}\` | ${r.latencyMs}ms | ${r.country?.toUpperCase()}`;
-        } else {
-          msg += ` — ${r.error}`;
+
+      if (!status || !status.providers || status.providers.length === 0) {
+        msg += '⚠️ No proxy providers configured.';
+      } else {
+        const alive = status.providers.filter(p => p.alive);
+        msg += `✅ ${alive.length} / ${status.providers.length} providers healthy\n`;
+        msg += `🧪 Last check: ${status.lastCheckTime || 'unknown'}\n\n`;
+
+        for (const p of status.providers) {
+          const icon = p.alive ? '✅' : '❌';
+          msg += `${icon} *${p.label}* (${p.type})\n`;
+          if (p.alive) {
+            msg += `   IP: \`${p.lastIp}\` | ${p.lastLatency ?? 'N/A'}ms | ${p.lastCountry?.toUpperCase() || '??'}\n`;
+          } else {
+            msg += `   ${p.lastError || 'unreachable'}\n`;
+          }
         }
-        msg += '\n';
+
+        if (HAS_PROXY) {
+          msg += '\n' + getProxySummary();
+        }
       }
-      if (!HAS_PROXY) {
-        msg += '\n⚠️ No proxy providers configured.';
+
+      await ctx.reply(msg, { parse_mode: 'Markdown' });
+    } catch (err) {
+      await ctx.reply(`❌ Health check failed: ${err.message}`);
+    }
+  }
+
+  async function handleProxyCheck(ctx) {
+    await ctx.reply('🩺 *Running deep health check on all proxies...*', { parse_mode: 'Markdown' });
+    try {
+      const status = await getProviderStatus();
+      let msg = `📊 *Proxy Health Report*\n\n`;
+
+      if (!status || !status.providers || status.providers.length === 0) {
+        msg += '⚠️ No proxy providers configured.\n';
+        msg += 'Add HTTP_PROXIES and/or SOCKS5_PROXIES in your .env file.';
+      } else {
+        const alive = status.providers.filter(p => p.alive);
+        msg += `✅ ${alive.length} / ${status.providers.length} providers healthy\n`;
+        msg += `🧪 Last check: ${status.lastCheckTime || 'unknown'}\n\n`;
+
+        for (const p of status.providers) {
+          const icon = p.alive ? '✅' : '❌';
+          msg += `${icon} *${p.label}* (${p.type})\n`;
+          if (p.alive) {
+            msg += `   IP: \`${p.lastIp}\` | ${p.lastLatency ?? 'N/A'}ms | ${p.lastCountry?.toUpperCase() || '??'}\n`;
+            if (p.instagramSafe !== undefined) {
+              msg += `   IG-safe: ${p.instagramSafe ? '✅' : '⚠️'}\n`;
+            }
+          } else {
+            msg += `   ${p.lastError || 'unreachable'}\n`;
+          }
+        }
+
+        // Show best proxy
+        try {
+          const best = await getWorldwideBestProxy();
+          if (best) {
+            msg += '\n🏆 *Current Best Proxy:*\n';
+            msg += `   Provider: ${best.providerLabel} (${best.type})\n`;
+            msg += `   Country: ${best.country?.toUpperCase() || '??'} | Latency: ${best._liveLatencyMs ?? 'N/A'}ms\n`;
+          }
+        } catch {}
+
+        if (HAS_PROXY) {
+          msg += '\n' + getProxySummary();
+        }
       }
+
       await ctx.reply(msg, { parse_mode: 'Markdown' });
     } catch (err) {
       await ctx.reply(`❌ Health check failed: ${err.message}`);
@@ -246,8 +304,16 @@ export async function createBot() {
   }
 
   async function handleCancel(ctx) {
-    ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: null, bulkMode: false, username: null, creds: null };
-    await replyWithKeyboard(ctx, '❌ Cancelled. Tap a button below or send /register to start.');
+    // Force-close any active browser session
+    try {
+      const result = await forceCancelRegistration();
+      console.log('[cancel]', result.message);
+    } catch (err) {
+      console.log('[cancel] Error closing browser:', err.message);
+    }
+    const prevProxyCancel = ctx.session?.proxy;
+    ctx.session = { step: 'idle', fullName: null, email: null, password: null, proxy: prevProxyCancel || null, bulkMode: false, username: null, creds: null };
+    await replyWithKeyboard(ctx, '❌ Cancelled. Browser closed. Tap a button below or send /register to start.');
   }
 
   async function handleHelp(ctx) {
@@ -318,6 +384,7 @@ export async function createBot() {
   bot.command('countries', handleCountries);
   bot.command('proxy', handleProxy);
   bot.command('proxystatus', handleProxyStatus);
+  bot.command('proxycheck', handleProxyCheck);
   bot.command('cancel', handleCancel);
   bot.command('help', handleHelp);
   bot.command('2fa', handle2fa);
@@ -420,7 +487,7 @@ export async function createBot() {
         return;
       }
       const cc = normalizeCountry(countryInput);
-      if (!SUPPORTED_COUNTRIES.includes(cc)) {
+      if (!ALL_COUNTRIES.includes(cc)) {
         await ctx.reply(`❌ Country "${countryInput}" not supported. Use /countries to see the full list.\n\n💡 Or type \`proxy\` for auto best-proxy mode.`, { parse_mode: 'Markdown' });
         return;
       }
@@ -509,7 +576,7 @@ export async function createBot() {
             proxyCountry = 'auto';
           } else if (raw.length >= 2) {
             const cc = normalizeCountry(raw);
-            if (SUPPORTED_COUNTRIES.includes(cc)) {
+            if (ALL_COUNTRIES.includes(cc)) {
               proxyCountry = cc;
             }
           }
@@ -597,7 +664,7 @@ export async function createBot() {
           proxyCountry = 'auto';
         } else if (raw.length >= 2) {
           const cc = normalizeCountry(raw);
-          if (SUPPORTED_COUNTRIES.includes(cc)) {
+          if (ALL_COUNTRIES.includes(cc)) {
             proxyCountry = cc;
           } else {
             await ctx.reply(`❌ Unknown country: "${parts[1]}".\nUse /countries to see supported countries.\n\nProceeding without proxy...`);
@@ -809,6 +876,7 @@ export async function createBot() {
     { command: '2fa', description: '🔐 Complete 2FA authenticator app setup' },
     { command: 'proxy', description: '🌍 Set proxy country (e.g., /proxy US)' },
     { command: 'proxystatus', description: '📊 Check health of all proxy providers' },
+    { command: 'proxycheck', description: '🩺 Deep health check + Instagram safety scan' },
     { command: 'noproxy', description: '🔓 Disable proxy, use your own IP' },
     { command: 'countries', description: '🌐 See all supported proxy countries' },
     { command: 'otp', description: '🔢 Enter a 6-digit OTP code' },
