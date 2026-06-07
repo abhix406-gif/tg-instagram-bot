@@ -79,6 +79,11 @@ async function main() {
     console.log(`  ✅ Webhook registered — bot is LIVE`);
   } else {
     // ── Polling mode (local) ──
+    // Delete any stale webhook first (Render may have set one)
+    try {
+      await bot.telegram.deleteWebhook({ drop_pending_updates: false });
+      console.log('  🧹 Cleared stale webhook');
+    } catch (_) { /* no webhook existed */ }
     // dropPendingUpdates: false — DON'T discard messages that arrived during startup
     await bot.launch({ dropPendingUpdates: false });
     console.log('  ✅ Bot is running (polling mode)');
